@@ -1,20 +1,15 @@
 package com.andyscan.gdaademo;
-
 /**
  * Copyright 2015 Sean Janson. All Rights Reserved.
- *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  **/
 
 import android.accounts.Account;
@@ -32,7 +27,6 @@ import android.provider.MediaStore;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.gms.auth.GoogleAuthUtil;
 import com.google.android.gms.common.AccountPicker;
@@ -45,7 +39,7 @@ import java.io.File;
 import java.util.ArrayList;
 
 public class MainActivity extends Activity
-                                      implements ConnectionCallbacks, OnConnectionFailedListener {
+ implements ConnectionCallbacks, OnConnectionFailedListener {
 
   static final String DIALOG_ERROR = "dialog_error";
   static final String REQUEST_CODE = "request_code";
@@ -107,7 +101,7 @@ public class MainActivity extends Activity
 
       case R.id.action_list: {
         mDispTxt.setText("running LONG test, patience please");
-        new AsyncTask<Void, Void, String>() {
+        new AsyncTask<Void, String, String>() {
           @Override
           protected String doInBackground(Void... params) {
             ArrayList<GooDrive.GF>gfs = GooDrive.testTreeGDAA(UT.MYROOT);      // GDAA flavor
@@ -117,8 +111,13 @@ public class MainActivity extends Activity
             String dsp = "";
             for (GooDrive.GF gf : gfs) {
               dsp += (gf.titl + "\n");
+              this.publishProgress(dsp);
             }
             return dsp;
+          }
+          @Override
+          protected void onProgressUpdate(String... dsps) { super.onProgressUpdate(dsps);
+            mDispTxt.setText(dsps[0]);
           }
           @Override
           protected void onPostExecute(String s) { super.onPostExecute(s);
@@ -138,7 +137,7 @@ public class MainActivity extends Activity
         startActivityForResult(
          AccountPicker.newChooseAccountIntent( acc,  // null value will work, no pre-selection
           null, new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null ),
-          REQ_ACCPICK
+         REQ_ACCPICK
         );
         return true;
       }
@@ -242,7 +241,7 @@ public class MainActivity extends Activity
     if (accnt == null) {
       accnt = UT.AM.getPrimaryAccnt(false);
       Intent it = AccountPicker.newChooseAccountIntent(accnt, null,
-               new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null
+       new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null
       );
       startActivityForResult(it, REQ_ACCPICK);
       return false;  //------------------>>>
