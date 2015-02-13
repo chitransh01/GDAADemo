@@ -1,20 +1,15 @@
 package com.andyscan.gdaademo;
-
 /**
  * Copyright 2014 Sean Janson. All Rights Reserved.
- *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
  * http://www.apache.org/licenses/LICENSE-2.0
- *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
  **/
 
 import java.io.BufferedReader;
@@ -80,9 +75,7 @@ final class GooDrive { private GooDrive() {}
        .usingOAuth2(ctx, Arrays.asList(DriveScopes.DRIVE_FILE))
        .setSelectedAccountName(email)
       ).build();
-
     }
-
   }
   /************************************************************************************************
    * connect / disconnect
@@ -106,8 +99,9 @@ final class GooDrive { private GooDrive() {}
   // (S)CRU(D) implementation of Google Drive Android API (GDAA) ////////////////////////////
   /************************************************************************************************
    * find file/folder in GOODrive
-   * @param titl    file/folder name (optional)
-   * @param mime    file/folder mime type (optional)
+   * @param prId    parent ID (optional), null searches full drive (within SCOPE)
+   * @param titl    file/folder name (optional), null gets all file names
+   * @param mime    file/folder mime type (optional), null gets all mime types
    * @return        list of file/folder IDs / null on fail
    */
   static ArrayList<GF> search(DriveId prId, String titl, String mime) {
