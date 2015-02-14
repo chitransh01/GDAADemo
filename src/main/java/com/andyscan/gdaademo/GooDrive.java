@@ -12,6 +12,7 @@ package com.andyscan.gdaademo;
  * limitations under the License.
  **/
 
+import android.graphics.Bitmap;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -384,17 +385,30 @@ final class GooDrive { private GooDrive() {}
     return rsid;
   }
   /************************************************************************************************
-   * get file contents
-   * @param rsId      file id
+   * get file contents, specifically image. The thmbSz, if not zero attepmts to retrieve an
+   * image thumbnail that fits into a square envelope of thmbSz pixels
+   * @param rsId   file id
+   * @param thmbSz reduced size envelope (optional value, 0 means full size image / file)
+   *  tested with:          128,220,320,400,512,640,720,800,1024,1280,1440,1600
    * @return          file's content  / null on fail
    */
-  static byte[] read(String rsId) {
+  static byte[] read(String rsId, int thmbSz) {
     byte[] buf = null;
     if (isConnected() && rsId != null) try {
-      File gFl = mGOOSvc.files().get(rsId).setFields("downloadUrl").execute();
+      File gFl = (thmbSz == 0) ?
+        mGOOSvc.files().get(rsId).setFields("downloadUrl").execute() :
+        mGOOSvc.files().get(rsId).setFields("thumbnailLink").execute();
       if (gFl != null){
+        String strUrl;
+        if (thmbSz == 0)
+           strUrl = gFl.getDownloadUrl();
+        else {
+           strUrl = gFl.getThumbnailLink();
+           if (! strUrl.endsWith("s220")) return null; //--- OOPS ------------>>>
+           strUrl = strUrl.substring(0, strUrl.length()-3) + Integer.toString(thmbSz);
+        }
         InputStream is = mGOOSvc.getRequestFactory()
-         .buildGetRequest(new GenericUrl(gFl.getDownloadUrl())).execute().getContent();
+                   .buildGetRequest(new GenericUrl(strUrl)).execute().getContent();
         buf = UT.is2Bytes(is);
       }
     } catch (Exception e) { UT.le(e); }
@@ -459,9 +473,13 @@ final class GooDrive { private GooDrive() {}
             ArrayList<GF> gfs2 = search(gf1.id, null, null);
             if (gfs2 != null) {
               for (GF gf2 : gfs2) {
-                byte[] buf = read(gf2.id);
+                byte[] buf = read(gf2.id, 720);
                 if (buf != null) {
-                  gf2.titl += (", " + (buf.length/1024) + " kB ");
+                  Bitmap bm = UT.jpg2Bmp(buf);
+                  if (bm != null)
+                    gf2.titl += (", " + (buf.length/1024)+" kB "+bm.getWidth()+"x"+bm.getHeight());
+                  else
+                    gf2.titl += (", " + (buf.length/1024)+" kB ");
                 } else {
                   gf2.titl += (" failed to download ");
                 }

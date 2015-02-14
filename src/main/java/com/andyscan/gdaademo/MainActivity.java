@@ -101,23 +101,19 @@ public class MainActivity extends Activity
 
       case R.id.action_list: {
         mDispTxt.setText("running LONG test, patience please");
-        new AsyncTask<Void, String, String>() {
+        new AsyncTask<Void, Void, String>() {
           @Override
           protected String doInBackground(Void... params) {
             ArrayList<GooDrive.GF>gfs = GooDrive.testTreeGDAA(UT.MYROOT);      // GDAA flavor
             //ArrayList<GooDrive.GF>gfs = GooDrive.testTreeREST(UT.MYROOT);      // RESTful flavor
-            if (gfs == null)
-              return null;
-            String dsp = "";
-            for (GooDrive.GF gf : gfs) {
-              dsp += (gf.titl + "\n");
-              this.publishProgress(dsp);
+            if (gfs != null) {
+              String dsp = "";
+              for (GooDrive.GF gf : gfs) {
+                dsp += (gf.titl + "\n");
+              }
+              return dsp;
             }
-            return dsp;
-          }
-          @Override
-          protected void onProgressUpdate(String... dsps) { super.onProgressUpdate(dsps);
-            mDispTxt.setText(dsps[0]);
+            return null;
           }
           @Override
           protected void onPostExecute(String s) { super.onPostExecute(s);
@@ -282,5 +278,4 @@ public class MainActivity extends Activity
       getActivity().finish();
     }
   }
-
 }

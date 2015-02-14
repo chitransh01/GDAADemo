@@ -21,6 +21,8 @@ import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
@@ -183,6 +185,9 @@ final public class UT {  private UT() {}
       } catch (Exception e) {le(e);}
     }
     return buf;
+  }
+  static Bitmap jpg2Bmp(byte[] buf) {
+    return buf == null ? null : BitmapFactory.decodeByteArray(buf, 0, buf.length);
   }
 
   static String time2Titl(Long milis) {       // time -> yymmdd-hhmmss
