@@ -27,6 +27,7 @@ import android.provider.MediaStore;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.auth.GoogleAuthUtil;
 import com.google.android.gms.common.AccountPicker;
@@ -203,7 +204,8 @@ public class MainActivity extends Activity
         } catch (IntentSender.SendIntentException e) {
           finish();
         }
-      } else {
+      } else {                                                           UT.lg("no resolution");
+          Toast.makeText(this, R.string.err_auth, Toast.LENGTH_LONG).show();
         finish();
       }
     }

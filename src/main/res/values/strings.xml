@@ -25,5 +25,6 @@
   <string name="action_scan">Scan Document</string>
   <string name="action_list">List Files</string>
   <string name="action_account">Select Google Account…</string>
+  <string name="err_auth">Check Developers Console (SHA1/PackageName)</string>
 
 </resources>
