@@ -8,7 +8,7 @@
       1/ UPLOAD (upload icon) will invoke a camera and the resulting picture is uploaded to
       Google Drive, creating a simple tree directory structure in the process.
       The createTreeGDAA/createTreeREST methods allow to test different methods
-      (search, create folder, ...) in the process.\n\n
+      (search, create folder, …) in the process.\n\n
 
       2/ DOWNLOAD (download icon) scans the tree created by GDAADemo
       (testTreeGDAA/testTreeREST methods). If the object is a file (jpg), it\'s metadata
