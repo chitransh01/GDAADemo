@@ -543,8 +543,6 @@ final class GooDrive { private GooDrive() {}
 
 /***
  //DriveId dId = md.getDriveId();
- //DriveId.decodeFromString(dId.encodeToString())
- //dId.getResourceId()
- //md.getDescription(), md.getTitle(),
- //md.getAlternateLink(), md.getEmbedLink(), md.getWebContentLink(), md.getWebViewLink()
+ //DriveId dId = DriveId.decodeFromString(dId.encodeToString())
+ //ResourceId rsid = dId.getResourceId()
  ***/
