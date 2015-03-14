@@ -442,6 +442,24 @@ final class GooDrive { private GooDrive() {}
   }
 
   /************************************************************************************************
+   * trash file in GOODrive
+   * @param rsid  file  id
+   * @return       success status
+   */
+  static boolean trash(String rsid) throws IOException {
+    return null != mGOOSvc.files().trash(rsid).execute();
+  }
+
+  /************************************************************************************************
+   * delete file in GOODrive
+   * @param rsid  file  id
+   * @return       success status
+   */
+  static boolean delete(String rsid) throws IOException {
+    return null != mGOOSvc.files().delete(rsid).execute();
+  }
+
+  /************************************************************************************************
    * builds a file tree MYROOT/yyyy-mm/yymmdd-hhmmss.jpg
    * @param root  MYROOT
    * @param titl  new file name
@@ -521,9 +539,6 @@ final class GooDrive { private GooDrive() {}
     String titl, id;
     GF(String t, String i) { titl = t; id = i;}
   }
-
-
-
 }
 
 /***
