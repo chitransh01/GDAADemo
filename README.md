@@ -35,3 +35,6 @@ the code is simpler, best suited for testing. This also allows me to keep
 GDAA methods compatible with the REST counterparts.
 
 Hope it helps.
+
+IMPORTANT:
+In case authorization fails with 'no resolution', indicated by the 'Check Developers Console (SHA1/PackageName)' toast, check the SHA1 of the APK file you're running (see StackOverflow 28532206) and make sure your Developers Console has correct SHA1/PackageName pair and the Consent Screen has a valid email address.
