@@ -542,7 +542,13 @@ final class GooDrive { private GooDrive() {}
 }
 
 /***
- //DriveId dId = md.getDriveId();
- //DriveId dId = DriveId.decodeFromString(dId.encodeToString())
- //ResourceId rsid = dId.getResourceId()
- ***/
+ DriveId dId = md.getDriveId();
+
+ DriveId dId = DriveId.decodeFromString(dId.encodeToString())
+
+ // DriveId -> ResourceId
+ ResourceId rsid = dId.getResourceId()
+ // ResourceId -> DriveId
+ DriveApi.DriveIdResult r = Drive.DriveApi.fetchDriveId(mGAC, rsid).await();
+ DriveId dId = (r == null || !r.getStatus().isSuccess()) ? null : r.getDriveId();
+***/
