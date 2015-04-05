@@ -15,16 +15,18 @@
       is updated (description field) and the content is downloaded (and dumped)
       - only the number of bytes is reported. \n\n
 
-      It should be noted, that the code uses the simplest implementation, the \'AWAIT\' flavor
-      of the GDAA calls. It must be implemented in non-UI thread, but the code is simpler,
-      best suited for testing. This also allows me to keep GDAA methods compatible with
-      the REST counterparts.
     </string>
 
   <!-- menu -->
   <string name="action_scan">Scan Document</string>
   <string name="action_list">List Files</string>
   <string name="action_account">Select Google Account…</string>
+
+  <string name="msg_connect">connection success</string>
+  <string name="msg_suspend">connection suspended</string>
+
   <string name="err_auth">Check Developers Console (SHA1/PackageName)</string>
+  <string name="err_noacc">No Account Selected</string>
+  <string name="err_quit">User Cancelled</string>
 
 </resources>

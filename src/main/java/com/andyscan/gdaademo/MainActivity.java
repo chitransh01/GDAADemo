@@ -20,6 +20,7 @@ import android.app.DialogFragment;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -49,7 +50,7 @@ public class MainActivity extends Activity
   private static final int REQ_ACCPICK = 1;
   private static final int REQ_AUTH    = 2;
   private static final int REQ_RECOVER = 3;
-  private static final int REQ_SCAN    = 4;
+  private static final int REQ_PHOTO   = 4;
 
   private static boolean mIsInAuth;
   private static TextView mDispTxt;
@@ -63,8 +64,8 @@ public class MainActivity extends Activity
     UT.init(this);
 
     if (checkPlayServices() && checkUserAccount()) {
-      GooDrive.init(this, UT.AM.getActiveEmil());
-      GooDrive.connect(true);
+      if (initDrive(this, UT.AM.getActiveEmil()))
+        connect();
     }
     if (bundle != null) {
       mTmpFlNm = bundle.getString(TMP_FILE_NAME);
@@ -93,7 +94,7 @@ public class MainActivity extends Activity
           } catch (java.io.IOException e) {UT.le(e); }
           if (tmpFl != null) {
             it.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(tmpFl));
-            startActivityForResult(it, REQ_SCAN);
+            startActivityForResult(it, REQ_PHOTO);
             mTmpFlNm = tmpFl.getAbsolutePath();
           }
         }
@@ -105,11 +106,10 @@ public class MainActivity extends Activity
         new AsyncTask<Void, Void, String>() {
           @Override
           protected String doInBackground(Void... params) {
-            ArrayList<GooDrive.GF>gfs = GooDrive.testTreeGDAA(UT.MYROOT);      // GDAA flavor
-            //ArrayList<GooDrive.GF>gfs = GooDrive.testTreeREST(UT.MYROOT);      // RESTful flavor
+            ArrayList<UT.GF>gfs = testTree();
             if (gfs != null) {
               String dsp = "";
-              for (GooDrive.GF gf : gfs) {
+              for (UT.GF gf : gfs) {
                 dsp += (gf.titl + "\n");
               }
               return dsp;
@@ -149,12 +149,12 @@ public class MainActivity extends Activity
         if (result == Activity.RESULT_OK && data != null) {        UT.lg("ACCPICK ok");
           String email = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
           if (UT.AM.setEmil(email) == UT.AM.CHANGED) {
-            GooDrive.init(this, UT.AM.getActiveEmil());
-            GooDrive.connect(true);
+            initDrive(this, UT.AM.getActiveEmil());
+            connect();
           }
         } else if (UT.AM.getActiveEmil() == null) {                UT.lg("ACCPICK cancelled");
           UT.AM.removeActiveAccnt();
-          finish();
+          suicide(this, R.string.err_noacc);
         }
         break;
       }
@@ -162,15 +162,15 @@ public class MainActivity extends Activity
       case REQ_AUTH: case REQ_RECOVER: {  // from  GOOPlaySvcs recoverable failure
         mIsInAuth = false;
         if (result == Activity.RESULT_OK) {           UT.lg("AUTH RECOVER ok " + request);
-          GooDrive.connect(true);
+          connect();
         } else if (result == RESULT_CANCELED) {       UT.lg("AUTH RECOVER cancel " + request);
           UT.AM.removeActiveAccnt();
-          finish();
+          suicide(this, R.string.err_quit);
         }
         break;
       }
 
-      case REQ_SCAN: {
+      case REQ_PHOTO: {
         if (result == Activity.RESULT_OK) {                                UT.lg( "scanned");
           final String titl = UT.time2Titl(null);
           if (titl != null && mTmpFlNm != null) {
@@ -178,8 +178,7 @@ public class MainActivity extends Activity
               File tmpFl = null;
               try {
                 tmpFl = new File(mTmpFlNm);
-                GooDrive.createTreeGDAA(UT.MYROOT, titl, UT.file2Bytes(tmpFl));   // GDAA flavor
-                //GooDrive.createTreeREST(UT.MYROOT, titl, UT.file2Bytes(tmpFl));  // REST flavor
+                createTree(titl, UT.file2Bytes(tmpFl));
               } finally { if (tmpFl != null) tmpFl.delete(); }
             }}).start();
           }
@@ -192,27 +191,111 @@ public class MainActivity extends Activity
 
   @Override
   public void onConnectionSuspended(int i) {                              UT.lg("suspended ");
+    Toast.makeText(this, R.string.msg_suspend, Toast.LENGTH_SHORT).show();
   }
 
   @Override
-  public void onConnectionFailed(ConnectionResult result) {               UT.lg("failed ");
+  public void onConnectionFailed(ConnectionResult result) {                 UT.lg("failed ");
     if (!mIsInAuth) {
-      if (result.hasResolution()) {
+      if (result == null || !result.hasResolution()) {                UT.lg("no resolution");
+        suicide(this, R.string.err_auth);
+      } else {                                                        UT.lg("has resolution");
         try {
           mIsInAuth = true;
           result.startResolutionForResult(this, REQ_AUTH);
         } catch (IntentSender.SendIntentException e) {
-          finish();
+          suicide(this, R.string.err_auth);
         }
-      } else {                                                           UT.lg("no resolution");
-          Toast.makeText(this, R.string.err_auth, Toast.LENGTH_LONG).show();
-        finish();
       }
     }
   }
 
   @Override
   public void onConnected(Bundle bundle) {                               UT.lg("connected ");
+    Toast.makeText(this, R.string.msg_connect, Toast.LENGTH_SHORT).show();
+  }
+
+  private boolean initDrive(MainActivity act, String emil) {
+    return REST.initDrive(act, emil);
+    //return GDAA.initDrive(act, emil);
+  }
+
+  private void connect() {
+    REST.connect(true);
+    //GDAA.connect(true);
+  }
+
+  /************************************************************************************************
+   * builds a file tree MYROOT/yyyy-mm/yymmdd-hhmmss.jpg
+   * @param titl  new file name
+   * @param buf   new file contents
+   */
+  private void createTree(String titl, byte[] buf) {
+    if (titl != null) {
+      String rsid = findOrCreateFolder(UT.SYSROOT, UT.MYROOT);
+      if (rsid != null) {
+        rsid = findOrCreateFolder(rsid, UT.titl2Month(titl));
+        if (rsid != null) {
+          REST.create(rsid, titl + UT.JPEG_EXT, UT.MIME_JPEG, buf);
+          //GDAA.create(rsid, titl + UT.JPEG_EXT, UT.MIME_JPEG, buf);
+        }
+      }
+    }
+  }
+  private static String  findOrCreateFolder(String prnt, String titl){
+    ArrayList<UT.GF> gfs = REST.search(prnt, titl, UT.MIME_FLDR);
+    //ArrayList<UT.GF> gfs = GDAA.search(prnt, titl, UT.MIME_FLDR);
+    if (gfs.size() > 0) {
+      return gfs.get(0).id;
+    }
+    return REST.create(prnt, titl, null, null);
+    //return GDAA.create(prnt, titl, null, null);
+  }
+
+
+  /************************************************************************************************
+   * runs a test scanning GooDrive, downloading and updating jpegs
+   */
+  private ArrayList<UT.GF> testTree() {
+    ArrayList<UT.GF> gfs0 = REST.search(UT.SYSROOT, UT.MYROOT, null);
+    //ArrayList<UT.GF> gfs0 = GDAA.search(UT.SYSROOT, UT.MYROOT, null);
+    if (gfs0 != null) {
+      for (UT.GF gf0 : gfs0) {
+        ArrayList<UT.GF> gfs1 = REST.search(gf0.id, null, null);
+        //ArrayList<UT.GF> gfs1 = GDAA.search(gf0.id, null, null);
+        if (gfs1 != null) {
+          gfs0.addAll(gfs1);
+          for (UT.GF gf1 : gfs1) {
+            ArrayList<UT.GF> gfs2 = REST.search(gf1.id, null, null);
+            //ArrayList<UT.GF> gfs2 = GDAA.search(gf1.id, null, null);
+            if (gfs2 != null) {
+              for (UT.GF gf2 : gfs2) {
+                byte[] buf = REST.read(gf2.id);
+                //byte[] buf = GDAA.read(gf2.id);
+                if (buf != null) {
+                  Bitmap bm = UT.jpg2Bmp(buf);
+                  if (bm != null)
+                    gf2.titl += (", " + (buf.length/1024)+" kB "+bm.getWidth()+"x"+bm.getHeight());
+                  else
+                    gf2.titl += (", " + (buf.length/1024)+" kB ");
+                } else {
+                  gf2.titl += (" failed to download ");
+                }
+                REST.update(gf2.id, null, null, "seen " + UT.time2Titl(null), null);
+                //GDAA.update(gf2.id, null, null, "seen " + UT.time2Titl(null), null);
+                gfs0.add(gf2);
+              }
+            }
+          }
+        }
+      }
+    }
+    return gfs0;
+  }
+
+  void suicide(Activity act, int strId) {
+    Toast.makeText(act, strId, Toast.LENGTH_LONG).show();
+    finish();
   }
 
   private boolean checkUserAccount() {                                UT.lg("check user acc");
@@ -253,7 +336,7 @@ public class MainActivity extends Activity
       if (GooglePlayServicesUtil.isUserRecoverableError(status)) {
         errorDialog(status, REQ_RECOVER);
       } else {
-        finish();
+        suicide(this, R.string.err_auth);
       }
       return false;
     }
@@ -277,7 +360,7 @@ public class MainActivity extends Activity
     }
     @Override
     public void onDismiss(DialogInterface dialog) {
-      getActivity().finish();
+      ((MainActivity)getActivity()).suicide(getActivity(), R.string.err_quit);
     }
   }
 }

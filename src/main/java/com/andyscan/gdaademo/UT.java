@@ -45,6 +45,7 @@ import java.util.Locale;
 final public class UT {  private UT() {}
   private static final String L_TAG = "_";
 
+  static final String SYSROOT = "root";
   static final String MYROOT = "GDAADemoRoot";
   static final String TMP_FILENM = "temp";
   static final String JPEG_EXT = ".jpg";
@@ -66,6 +67,11 @@ final public class UT {  private UT() {}
       mInst = new UT();                                         //lg("img cache " + ccheSz);
     }
     return mInst;
+  }
+
+  final static class GF{
+    String titl, id;
+    GF(String t, String i) { titl = t; id = i;}
   }
 
   final static class AM{  private AM() {}
@@ -208,7 +214,7 @@ final public class UT {  private UT() {}
   }
   static void le(Throwable ex){
     String msg = (ex == null || ex.getMessage() == null) ? "" : ex.getMessage() +"\n";
-    try { Log.e(L_TAG, msg  + stack2String(ex)); } catch (Exception e) {}
+    try { Log.e(L_TAG, msg  + stack2String(ex)); } catch (Exception ignored) {}
   }
   static void lg(String msg) { if (msg != null) { Log.d(L_TAG, msg); } }
 
