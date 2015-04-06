@@ -13,11 +13,12 @@ package com.andyscan.gdaademo;
  **/
 
 import android.app.Activity;
-import android.os.Bundle;
+import android.os.AsyncTask;
 
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
-import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAuthIOException;
+import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.FileContent;
 import com.google.api.client.http.GenericUrl;
 import com.google.api.client.json.gson.GsonFactory;
@@ -27,19 +28,17 @@ import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
 import com.google.api.services.drive.model.ParentReference;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-interface ConnectionCallbacks {
-  void onConnected(Bundle bundle);
-  void onConnectionSuspended(int i);
-}
-interface OnConnectionFailedListener {
-  void onConnectionFailed(GoogleAuthIOException gaiEx);
-}
 
 final class REST { private REST() {}
+  interface ConnCBs {
+    void onRESTConnOK();
+    void onRESTConnFail(UserRecoverableAuthIOException uraIOEx);
+  }
   private static Drive mGOOSvc;
   private static Activity mAct;
   private static boolean mConnected;
@@ -65,18 +64,36 @@ final class REST { private REST() {}
    * connect / disconnect
    */
   static void connect(boolean bOn) {
-    if (!mConnected && bOn) {                                           UT.lg( "connect ");
-      try {
-        mGOOSvc.files().get(UT.SYSROOT).setFields("items(id)").execute();
-        mConnected = true;
-        ((ConnectionCallbacks)mAct).onConnected(null);
-      } catch (GoogleAuthIOException gaIOEx) {
-        mConnected = false;
-        ((OnConnectionFailedListener)mAct).onConnectionFailed(gaIOEx);
-      } catch (Exception e) {
-        mConnected = false;
-        ((OnConnectionFailedListener)mAct).onConnectionFailed(null);
-      }
+    if (!mConnected && bOn) {                                                UT.lg( "connect ");
+      new AsyncTask<Void, Void, UserRecoverableAuthIOException>(){
+        @Override
+        protected UserRecoverableAuthIOException doInBackground(Void... nadas) {
+          try {
+            mGOOSvc.files().get(UT.SYSROOT).setFields("title").execute();
+            mConnected = true;
+          }
+          catch (UserRecoverableAuthIOException uraIOEx) {
+            return uraIOEx;
+          }
+          catch (IOException e) {   // '404 not found' in FILE scope, consider connected
+            if (e instanceof GoogleJsonResponseException) {
+              if (404 == ((GoogleJsonResponseException)e).getStatusCode())
+                mConnected = true;
+            }
+          }
+          catch (Exception e) { UT.le(e); }
+          return null;
+        }
+
+        @Override
+        protected void onPostExecute(UserRecoverableAuthIOException uraIOEx) {
+          super.onPostExecute(uraIOEx);
+          if (mConnected)
+            ((ConnCBs)mAct).onRESTConnOK();
+          else
+            ((ConnCBs)mAct).onRESTConnFail(uraIOEx);
+        }
+      }.execute();
     }
   }
 
