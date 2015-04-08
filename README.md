@@ -1,7 +1,7 @@
 # GDAADemo
 
-GDAADemo is a minimal implementation of (S)CRUD functionality applied to both, 
-the Google Drive Android API (GDAA), https://developers.google.com/drive/android, and
+GDAADemo is a minimal implementation of (S)CRUD functionality applied to both,<br/> 
+the Google Drive Android API (GDAA), https://developers.google.com/drive/android, and<br/>
 the Google Drive Web APIs (REST) https://developers.google.com/drive/v2/reference  
 
 The usage of REST vs GDAA APis is controlled by the 'USE_REST' boolean in 
