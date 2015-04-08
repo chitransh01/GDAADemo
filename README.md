@@ -14,7 +14,7 @@ issues that can't be easily reconciled.
 The demo is very raw, it dumps its output directly to the screen and is intended
 mostly as a tool to step through in a debugger. 
  
-GDAADemo has 3 functions:\n\n
+GDAADemo has 3 functions:
 
 1/ UPLOAD invokes a camera and the resulting thumbnail is uploaded to
    Google Drive, creating a simple tree directory structure in the process.
