@@ -12,7 +12,6 @@ package com.andyscan.gdaademo;
  * limitations under the License.
  **/
 
-import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.app.Activity;
 import android.app.Dialog;
@@ -21,7 +20,6 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Bitmap;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -36,13 +34,13 @@ import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.common.api.GoogleApiClient.OnConnectionFailedListener;
 import com.google.android.gms.common.api.GoogleApiClient.ConnectionCallbacks;
-import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
 
-import java.io.File;
 import java.util.ArrayList;
 
 public class MainActivity extends Activity
- implements ConnectionCallbacks, OnConnectionFailedListener, REST.ConnCBs {
+ implements ConnectionCallbacks, OnConnectionFailedListener {
+
+  static boolean USE_REST = false;
 
   static final String DIALOG_ERROR = "dialog_error";
   static final String REQUEST_CODE = "request_code";
@@ -53,9 +51,11 @@ public class MainActivity extends Activity
   private static final int REQ_RECOVER = 3;
   private static final int REQ_PHOTO   = 4;
 
+
   private static boolean mIsInAuth;
   private static TextView mDispTxt;
   private static String mTmpFlNm;
+  private static boolean mBusy;
 
   @Override
   protected void onCreate(Bundle bundle) { super.onCreate(bundle);
@@ -65,12 +65,14 @@ public class MainActivity extends Activity
     UT.init(this);
 
     if (checkPlayServices() && checkUserAccount()) {
-      if (initDrive(this, UT.AM.getActiveEmil()))
+      if (initDrive(this, UT.AM.getActiveEmail()))
         connect();
     }
     if (bundle != null) {
       mTmpFlNm = bundle.getString(TMP_FILE_NAME);
     }
+
+    setTitle(USE_REST ? "REST" : "GDAA");
   }
 
   @Override
@@ -88,18 +90,9 @@ public class MainActivity extends Activity
     switch (item.getItemId()) {
 
       case R.id.action_scan: {
-        mDispTxt.setText(getString(R.string.disp_text));
         Intent it = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (it.resolveActivity(UT.acx.getPackageManager()) != null) {
-          File tmpFl = null;
-          try {tmpFl = File.createTempFile(UT.TMP_FILENM, null, UT.acx.getExternalCacheDir());
-          } catch (java.io.IOException e) {UT.le(e); }
-          if (tmpFl != null) {
-            it.putExtra(MediaStore.EXTRA_OUTPUT, Uri.fromFile(tmpFl));
-            startActivityForResult(it, REQ_PHOTO);
-            mTmpFlNm = tmpFl.getAbsolutePath();
-          }
-        }
+        if (it.resolveActivity(UT.acx.getPackageManager()) != null)
+          startActivityForResult(it, REQ_PHOTO);
         return true;
       }
 
@@ -108,15 +101,13 @@ public class MainActivity extends Activity
         return true;
       }
 
+      case R.id.action_delete: {
+        deleteTree();
+        return true;
+      }
+
       case R.id.action_account: {
-        Account acc = UT.AM.getActiveAccnt();
-        if (acc == null)
-          acc = UT.AM.getPrimaryAccnt(false);
-        startActivityForResult(
-         AccountPicker.newChooseAccountIntent( acc,  // null value will work, no pre-selection
-          null, new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null ),
-         REQ_ACCPICK
-        );
+        accPick(false);
         return true;
       }
     }
@@ -127,27 +118,32 @@ public class MainActivity extends Activity
   protected void onActivityResult(int request, int result, Intent data) {
     switch (request) {
 
-      case REQ_ACCPICK: {  // return from account picker
+      case REQ_ACCPICK: {                                            UT.lg("ACCPICK");
+        String email;
         if (result == Activity.RESULT_OK && data != null) {          UT.lg("ACCPICK ok");
-          String email = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
-          if (UT.AM.setEmil(email) == UT.AM.CHANGED) {
-            initDrive(this, UT.AM.getActiveEmil());
-            connect();
+          email = data.getStringExtra(AccountManager.KEY_ACCOUNT_NAME);
+          if (UT.AM.setEmail(email) == UT.AM.CHANGED) {            UT.lg("ACCPICK changed");
+            if (initDrive(this, UT.AM.getActiveEmail()))
+              connect();
+          }                                                     else UT.lg("ACCPICK same");
+        } else {                                               UT.lg("ACCPICK cancel");
+          email = UT.AM.getActiveEmail();
+          if (email == null)
+            suicide(this, R.string.err_noacc);
+          else {
+            if (initDrive(this, email))
+              connect();
           }
-        } else if (UT.AM.getActiveEmil() == null) {                UT.lg("ACCPICK cancel");
-          UT.AM.removeActiveAccnt();
-          suicide(this, R.string.err_noacc);
         }
         break;
       }
 
-      case REQ_AUTH: case REQ_RECOVER: {  // from  GOOPlaySvcs recoverable failure
+      case REQ_AUTH: case REQ_RECOVER: { // from  GOOPlaySvcs recoverable failure
         mIsInAuth = false;
         if (result == Activity.RESULT_OK) {           UT.lg("AUTH RECOVER ok " + request);
           connect();
         } else if (result == RESULT_CANCELED) {       UT.lg("AUTH RECOVER cancel " + request);
-          UT.AM.removeActiveAccnt();
-          suicide(this, R.string.err_quit);
+          accPick(true);
         }
         break;
       }
@@ -155,14 +151,9 @@ public class MainActivity extends Activity
       case REQ_PHOTO: {
         if (result == Activity.RESULT_OK) {                                UT.lg( "scanned");
           final String titl = UT.time2Titl(null);
-          if (titl != null && mTmpFlNm != null) {
-            File tmpFl = null;
-            byte[] buf = null;
-            try {
-              tmpFl = new File(mTmpFlNm);
-              buf = UT.file2Bytes(tmpFl);
-            } finally { if (tmpFl != null) tmpFl.delete(); }
-            createTree(titl, buf);
+          if (titl != null) {
+            byte[] jpgBuf = UT.bm2Jpg((Bitmap)(data.getExtras()).get("data"), 92);
+            createTree(titl, jpgBuf);
           }
         }                                                                 else UT.lg("quit");
         break;
@@ -172,24 +163,27 @@ public class MainActivity extends Activity
   }
 
   private boolean initDrive(MainActivity act, String emil) {
-    return REST.initDrive(act, emil);
-    //return GDAA.initDrive(act, emil);
+    return USE_REST ? REST.initDrive(act, emil) : GDAA.initDrive(act, emil);
   }
 
   private void connect() {
-    REST.connect(true);
-    //GDAA.connect(true);
+    if (USE_REST)  REST.connect();
+    else           GDAA.connect();
   }
 
-  // *** GDAA connection callbacks ( no-ops if REST.connect used ) ***************************
+  // *** connection callbacks ***********************************************************
   @Override public void onConnectionSuspended(int i) {}
+  // both REST and GDAA
   @Override
-  public void onConnectionFailed(ConnectionResult result) {                 UT.lg("failed ");
+  public void onConnected(Bundle bundle) {                                 UT.lg("connected ");
+    Toast.makeText(this, R.string.msg_connect, Toast.LENGTH_SHORT).show();
+  }
+  // GDAA only connection fail, no-op on REST
+  @Override
+  public void onConnectionFailed(ConnectionResult result) {                  UT.lg("failed ");
     if (!mIsInAuth) {
       if (result == null || !result.hasResolution()) {                 UT.lg("no resolution");
-        startActivityForResult(AccountPicker.newChooseAccountIntent(null, null,
-        new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null
-        ), REQ_ACCPICK);
+        accPick(true);
       } else {                                                        UT.lg("has resolution");
         try {
           mIsInAuth = true;
@@ -200,99 +194,177 @@ public class MainActivity extends Activity
       }
     }
   }
-  @Override
-  public void onConnected(Bundle bundle) {                               UT.lg("connected ");
-    Toast.makeText(this, R.string.msg_connect, Toast.LENGTH_SHORT).show();
-  }
-
-  // *** REST connection callbacks ( no-ops if GDAA.connect used ) **************************
-  @Override
-  public void onRESTConnFail(UserRecoverableAuthIOException uraIOEx) {        UT.lg("failed ");
-    if (uraIOEx == null) {                                               UT.lg("no resolution");
-      startActivityForResult(AccountPicker.newChooseAccountIntent(null, null,
-      new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null
-      ), REQ_ACCPICK);
-    } else {                                                             UT.lg("has resolution");
-      Intent it = uraIOEx.getIntent();
-      if (it != null) {
+  // REST only connection fail, no-op on GDAA
+  void onRESTConnFail(Intent it) {                                     UT.lg("failed ");
+    if (!mIsInAuth) {
+      if (it == null) {                                              UT.lg("no resolution");
+        accPick(true);
+      } else {                                                      UT.lg("has resolution");
         mIsInAuth = true;
         startActivityForResult(it, REQ_AUTH);
       }
     }
   }
-  @Override
-  public void onRESTConnOK() {                                            UT.lg("connected ");
-    Toast.makeText(this, R.string.msg_connect, Toast.LENGTH_SHORT).show();
-  }
 
   private void createTree(final String titl, final byte[] buf) {
-    if (titl != null && buf != null) {
-      new AsyncTask<Void, Void, Void>() {
+    if (titl != null && buf != null && !mBusy) {
+      mDispTxt.setText("uploading");
+      new AsyncTask<Void, String, Void>() {
         @Override
         protected Void doInBackground(Void... params) {
-          String rsid = findOrCreateFolder(UT.SYSROOT, UT.MYROOT);
+          mBusy = true;
+          String rsid = findOrCreateFolder("root", UT.MYROOT);
           if (rsid != null) {
             rsid = findOrCreateFolder(rsid, UT.titl2Month(titl));
             if (rsid != null) {
-              REST.create(rsid, titl + UT.JPEG_EXT, UT.MIME_JPEG, buf);
-              //GDAA.create(rsid, titl + UT.JPEG_EXT, UT.MIME_JPEG, buf);
+              String title = titl + UT.JPEG_EXT;
+              String id = USE_REST ?
+                REST.create(rsid, title, UT.MIME_JPEG, buf):
+                GDAA.create(rsid, title, UT.MIME_JPEG, buf);
+
+              if (id != null)
+                publishProgress("  created " + title);
+              else
+                publishProgress("  failed " + title);
             }
           }
           return null;
         }
-        private String  findOrCreateFolder(String prnt, String titl){
-          ArrayList<UT.GF> gfs = REST.search(prnt, titl, UT.MIME_FLDR);
-          return gfs.size() > 0 ? gfs.get(0).id : REST.create(prnt, titl, null, null);
-          //ArrayList<UT.GF> gfs = GDAA.search(prnt, titl, UT.MIME_FLDR);
+        private String findOrCreateFolder(String prnt, String titl){
+          ArrayList<UT.GF> gfs = USE_REST ?
+            REST.search(prnt, titl, UT.MIME_FLDR): GDAA.search(prnt, titl, UT.MIME_FLDR);
+          String id, txt;
+          if (gfs.size() > 0) {
+            txt = "found ";
+            id =  gfs.get(0).id;
+          } else {
+            id = USE_REST ?
+            REST.create(prnt, titl, null, null) : GDAA.create(prnt, titl, null, null);
+            txt = "created ";
+          }
           //return gfs.size() > 0 ? gfs.get(0).id : GDAA.create(prnt, titl, null, null);
+          if (id != null)
+            txt += titl;
+          else
+            txt = "FAIL " + titl;
+          publishProgress(txt);
+          return id;
+        }
+        protected void onProgressUpdate(String... strings) { super.onProgressUpdate(strings);
+          mDispTxt.setText(mDispTxt.getText() + "\n" +  strings[0]);
+        }
+        @Override
+        protected void onPostExecute(Void nada) { super.onPostExecute(nada);
+          mDispTxt.setText(mDispTxt.getText() + "\nDONE");
+          mBusy = false;
         }
       }.execute();
     }
   }
 
   private void testTree() {
-    new AsyncTask<Void, String, Void>() {
-      @Override
-      protected Void doInBackground(Void... params) {
-        mDispTxt.setText("running LONG test, patience please");
-        ArrayList<UT.GF> gfs0 = REST.search(UT.SYSROOT, UT.MYROOT, null);
-        //ArrayList<UT.GF> gfs0 = GDAA.search(UT.SYSROOT, UT.MYROOT, null);
-        if (gfs0 != null) for (UT.GF gf0 : gfs0) {
-          this.publishProgress(gf0.titl);
-          ArrayList<UT.GF> gfs1 = REST.search(gf0.id, null, null);
-          //ArrayList<UT.GF> gfs1 = GDAA.search(gf0.id, null, null);
-          if (gfs1 != null) for (UT.GF gf1 : gfs1) {
-            this.publishProgress("  "+gf1.titl);
-            ArrayList<UT.GF> gfs2 = REST.search(gf1.id, null, null);
-            //ArrayList<UT.GF> gfs2 = GDAA.search(gf1.id, null, null);
-            if (gfs2 != null) for (UT.GF gf2 : gfs2) {
-              byte[] buf = REST.read(gf2.id);
-              //byte[] buf = GDAA.read(gf2.id);
-              if (buf != null) {
-                Bitmap bm = UT.jpg2Bmp(buf);
-                if (bm != null)
-                  gf2.titl += (", " + (buf.length/1024)+" kB "+bm.getWidth()+"x"+bm.getHeight());
-              } else {
-                gf2.titl += (" failed to download ");
+    if (!mBusy) {
+      mDispTxt.setText("downloading");
+      new AsyncTask<Void, String, Void>() {
+        @Override
+        protected Void doInBackground(Void... params) {
+          mBusy = true;
+          ArrayList<UT.GF> gfs0 = USE_REST ?
+            REST.search("root", UT.MYROOT, null): GDAA.search("root", UT.MYROOT, null);
+          if (gfs0 != null) for (UT.GF gf0 : gfs0) {
+            publishProgress(gf0.titl);
+            ArrayList<UT.GF> gfs1 = USE_REST ?
+              REST.search(gf0.id, null, null) : GDAA.search(gf0.id, null, null);
+            if (gfs1 != null) for (UT.GF gf1 : gfs1) {
+              publishProgress("  " + gf1.titl);
+              ArrayList<UT.GF> gfs2 = USE_REST ?
+                REST.search(gf1.id, null, null) : GDAA.search(gf1.id, null, null);
+              if (gfs2 != null) for (UT.GF gf2 : gfs2) {
+                byte[] buf = USE_REST ?  REST.read(gf2.id) : GDAA.read(gf2.id);
+                if (buf != null) {
+                  Bitmap bm = UT.jpg2Bmp(buf);
+                  if (bm == null)
+                    gf2.titl += (", " + (buf.length / 1024) + " kB ");
+                  else
+                    gf2.titl += (", " + bm.getWidth() + "x" + bm.getHeight());
+                } else {
+                  gf2.titl += (" failed to download ");
+                }
+                publishProgress("    " + gf2.titl);
+                if (USE_REST)
+                  REST.update(gf2.id, null, null, "seen " + UT.time2Titl(null), null);
+                else
+                  GDAA.update(gf2.id, null, null, "seen " + UT.time2Titl(null), null);
               }
-              this.publishProgress("    "+gf2.titl);
-              REST.update(gf2.id, null, null, "seen " + UT.time2Titl(null), null);
-              //GDAA.update(gf2.id, null, null, "seen " + UT.time2Titl(null), null);
             }
           }
+          return null;
         }
-        return null;
-      }
-      @Override
-      protected void onProgressUpdate(String... strings) { super.onProgressUpdate(strings);
-        mDispTxt.setText(mDispTxt.getText() + "\n" +  strings[0]);
-      }
-      @Override
-      protected void onPostExecute(Void nada) { super.onPostExecute(nada);
-        mDispTxt.setText(mDispTxt.getText() + "\nDONE");
-      }
-    }.execute();
+
+        @Override
+        protected void onProgressUpdate(String... strings) {
+          super.onProgressUpdate(strings);
+          mDispTxt.setText(mDispTxt.getText() + "\n" + strings[0]);
+        }
+
+        @Override
+        protected void onPostExecute(Void nada) {          super.onPostExecute(nada);
+          mDispTxt.setText(mDispTxt.getText() + "\nDONE");
+          mBusy = false;
+        }
+      }.execute();
+    }
   }
+
+  private void deleteTree() {
+    if (!mBusy) {
+      mDispTxt.setText("deleting");
+      new AsyncTask<Void, String, Void>() {
+        @Override
+        protected Void doInBackground(Void... params) {
+          mBusy = true;
+          String txt;
+          boolean bOK;
+          ArrayList<UT.GF> gfs0 = USE_REST ?
+            REST.search("root", UT.MYROOT, null) : GDAA.search("root", UT.MYROOT, null);
+          if (gfs0 != null) for (UT.GF gf0 : gfs0) {
+            ArrayList<UT.GF> gfs1 = USE_REST ?
+              REST.search(gf0.id, null, null) :  GDAA.search(gf0.id, null, null);
+            if (gfs1 != null) for (UT.GF gf1 : gfs1) {
+              ArrayList<UT.GF> gfs2 = USE_REST ?
+                REST.search(gf1.id, null, null):GDAA.search(gf1.id, null, null);
+              if (gfs2 != null) for (UT.GF gf2 : gfs2) {
+                bOK = USE_REST ? REST.delete(gf2.id) : GDAA.delete(gf2.id);
+                txt = gf2.titl + (bOK ? " OK" : " FAIL");
+                publishProgress("    " + txt);
+              }
+              bOK = USE_REST ? REST.delete(gf1.id) : GDAA.delete(gf1.id);
+              txt = gf1.titl + (bOK ? " OK" : " FAIL");
+              publishProgress("  " + txt);
+            }
+            bOK = USE_REST ? REST.delete(gf0.id) : GDAA.delete(gf0.id);
+            txt = gf0.titl + (bOK ? " OK" : " FAIL");
+            publishProgress(txt);
+          }
+          return null;
+        }
+
+        @Override
+        protected void onProgressUpdate(String... strings) {
+          super.onProgressUpdate(strings);
+          mDispTxt.setText(mDispTxt.getText() + "\n" + strings[0]);
+        }
+
+        @Override
+        protected void onPostExecute(Void nada) {
+          super.onPostExecute(nada);
+          mDispTxt.setText(mDispTxt.getText() + "\nDONE");
+          mBusy = false;
+        }
+      }.execute();
+    }
+  }
+
 
   void suicide(Activity act, int strId) {
     Toast.makeText(act, strId, Toast.LENGTH_LONG).show();
@@ -300,34 +372,13 @@ public class MainActivity extends Activity
   }
 
   private boolean checkUserAccount() {                                UT.lg("check user acc");
-    String email = UT.AM.getActiveEmil();
-    Account accnt = UT.AM.getPrimaryAccnt(true);
-
-    if (email == null) {  // no emil (after install)
-      if (accnt == null) {  // multiple or no accounts available, go pick one
-        accnt = UT.AM.getPrimaryAccnt(false);  // pre-select primary account if present
-        Intent it = AccountPicker.newChooseAccountIntent(accnt, null,
-         new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null
-        );
-        startActivityForResult(it, REQ_ACCPICK);
-        return false;  //--------------------->>>
-      } else {  // there's only one goo account registered with the device, skip the picker
-        UT.AM.setEmil(accnt.name);
-      }
-      return true;  //------------------>>>>
-    }
-
-    // UNLIKELY BUT POSSIBLE,
-    // emil's OK, but the account have been removed (through settings), re-select
-    accnt = UT.AM.getActiveAccnt();
-    if (accnt == null) {
-      accnt = UT.AM.getPrimaryAccnt(false);
-      Intent it = AccountPicker.newChooseAccountIntent(accnt, null,
-       new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null
-      );
-      startActivityForResult(it, REQ_ACCPICK);
+    String email = UT.AM.getActiveEmail();
+    if (email == null) { // no active and (multiple or no accounts), go create / pick one
+      accPick(true);
       return false;  //------------------>>>
     }
+    // active email, or only one registered, skip the picker
+    UT.AM.setEmail(email);
     return true;
   }
 
@@ -343,6 +394,19 @@ public class MainActivity extends Activity
     }
     return true;
   }
+
+  private void accPick(boolean bReset) {
+    startActivityForResult(
+      AccountPicker.newChooseAccountIntent(UT.AM.getBestAccnt(), null,
+      new String[]{GoogleAuthUtil.GOOGLE_ACCOUNT_TYPE}, true, null, null, null, null),
+      REQ_ACCPICK
+    );
+    if (bReset) {
+      UT.AM.removeActiveAccnt();
+    }
+  }
+
+
   private void errorDialog(int errorCode, int requestCode) {
     Bundle args = new Bundle();
     args.putInt(DIALOG_ERROR, errorCode);

@@ -12,7 +12,6 @@ package com.andyscan.gdaademo;
  * limitations under the License.
  **/
 
-import android.app.Activity;
 import android.os.AsyncTask;
 
 import com.google.api.client.extensions.android.http.AndroidHttp;
@@ -33,14 +32,9 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-
 final class REST { private REST() {}
-  interface ConnCBs {
-    void onRESTConnOK();
-    void onRESTConnFail(UserRecoverableAuthIOException uraIOEx);
-  }
   private static Drive mGOOSvc;
-  private static Activity mAct;
+  private static MainActivity mAct;
   private static boolean mConnected;
 
   /************************************************************************************************
@@ -48,28 +42,31 @@ final class REST { private REST() {}
    * @param ctx   activity context
    * @param email  GOO account
    */
-  static boolean initDrive(MainActivity ctx, String email){            UT.lg( "initDrive REST ");
+  static boolean initDrive(MainActivity ctx, String email){    UT.lg( "initDrive REST " + email);
     if (ctx != null && email != null) try {
       mAct = ctx;
       mGOOSvc = new com.google.api.services.drive.Drive.Builder(
-      AndroidHttp.newCompatibleTransport(), new GsonFactory(), GoogleAccountCredential
-      .usingOAuth2(ctx.getApplicationContext(), Arrays.asList(DriveScopes.DRIVE_FILE))
-      .setSelectedAccountName(email)
+      AndroidHttp.newCompatibleTransport(), new GsonFactory(),
+      GoogleAccountCredential
+        .usingOAuth2(ctx.getApplicationContext(), Arrays.asList(DriveScopes.DRIVE_FILE))
+        .setSelectedAccountName(email)
       ).build();
       return true;
     } catch (Exception e) {UT.le(e);}
     return false;
   }
-  /************************************************************************************************
+
+  /**
    * connect / disconnect
    */
-  static void connect(boolean bOn) {
-    if (!mConnected && bOn) {                                                UT.lg( "connect ");
+  static void connect() {
+    if (mGOOSvc != null) {
+      mConnected = false;
       new AsyncTask<Void, Void, UserRecoverableAuthIOException>(){
         @Override
         protected UserRecoverableAuthIOException doInBackground(Void... nadas) {
           try {
-            mGOOSvc.files().get(UT.SYSROOT).setFields("title").execute();
+            mGOOSvc.files().get("root").setFields("title").execute();
             mConnected = true;
           }
           catch (UserRecoverableAuthIOException uraIOEx) {
@@ -80,8 +77,7 @@ final class REST { private REST() {}
               if (404 == ((GoogleJsonResponseException)e).getStatusCode())
                 mConnected = true;
             }
-          }
-          catch (Exception e) { UT.le(e); }
+          } catch (Exception e) { UT.le(e); }
           return null;
         }
 
@@ -89,9 +85,10 @@ final class REST { private REST() {}
         protected void onPostExecute(UserRecoverableAuthIOException uraIOEx) {
           super.onPostExecute(uraIOEx);
           if (mConnected)
-            ((ConnCBs)mAct).onRESTConnOK();
-          else
-            ((ConnCBs)mAct).onRESTConnFail(uraIOEx);
+            mAct.onConnected(null);
+          else {
+            mAct.onRESTConnFail(uraIOEx == null ? null : uraIOEx.getIntent());
+          }
         }
       }.execute();
     }
@@ -99,14 +96,14 @@ final class REST { private REST() {}
 
   /************************************************************************************************
    * find file/folder in GOODrive
-   * @param prnId   parent ID (optional), null searches full drive (within SCOPE)
+   * @param prnId   parent ID (optional), null searches full drive, "root" searches Drive root
    * @param titl    file/folder name (optional)
    * @param mime    file/folder mime type (optional)
    * @return        arraylist of found objects
    */
   static ArrayList<UT.GF> search(String prnId, String titl, String mime) {
     ArrayList<UT.GF> gfs = new ArrayList<>();
-    if (mConnected) {
+    if (mGOOSvc != null && mConnected) try {
       // add query conditions, build query
       String qryClause = "'me' in owners and ";
       if (prnId != null) qryClause += "'" + prnId + "' in parents and ";
@@ -129,12 +126,12 @@ final class REST { private REST() {}
           }
         } while (npTok != null && npTok.length() > 0);         //UT.lg("found " + vlss.size());
       } catch (Exception e) { UT.le(e); }
-    }
+    } catch (Exception e) { UT.le(e); }
     return gfs;
   }
   /************************************************************************************************
    * create file/folder in GOODrive
-   * @param prnId  parent's ID, null for root
+   * @param prnId  parent's ID, (null or "root") for root
    * @param titl  file name
    * @param mime  file mime type
    * @param buf   file content (optional, if null, create folder)
@@ -142,9 +139,9 @@ final class REST { private REST() {}
    */
   static String create(String prnId, String titl, String mime, byte[] buf) {
     String rsid = null;
-    if (mConnected && titl != null) {
+    if (mGOOSvc != null && mConnected && titl != null) try {
       File meta = new File();
-      meta.setParents(Arrays.asList(new ParentReference().setId(prnId==null ? UT.SYSROOT : prnId)));
+      meta.setParents(Arrays.asList(new ParentReference().setId(prnId == null ? "root" : prnId)));
       meta.setTitle(titl);
 
       File gFl = null;
@@ -169,7 +166,7 @@ final class REST { private REST() {}
           rsid = gFl.getId();
         }
       }
-    }
+    } catch (Exception e) { UT.le(e); }
     return rsid;
   }
   /************************************************************************************************
@@ -179,7 +176,7 @@ final class REST { private REST() {}
    */
   static byte[] read(String resId) {
     byte[] buf = null;
-    if (mConnected && resId != null) try {
+    if (mGOOSvc != null && mConnected && resId != null) try {
       File gFl = mGOOSvc.files().get(resId).setFields("downloadUrl").execute();
       if (gFl != null){
         String strUrl = gFl.getDownloadUrl();
@@ -201,7 +198,7 @@ final class REST { private REST() {}
   static boolean update(String resId, String titl, String mime, String desc, byte[] buf){
     Boolean bOK = false;
     java.io.File jvFl = null;
-    if (mGOOSvc != null && resId != null) try {
+    if (mGOOSvc != null && mConnected && resId != null) try {
       File body = new File();
       if (titl != null) body.setTitle(titl);
       if (mime != null) body.setMimeType(mime);
@@ -222,32 +219,10 @@ final class REST { private REST() {}
    * @return       success status
    */
   static boolean delete(String resId) {
-    try {
+    if (mGOOSvc != null && mConnected && resId != null) try {
       return null != mGOOSvc.files().trash(resId).execute();
     } catch (Exception e) {UT.le(e);}
     return false;
-  }
-
-  /************************************************************************************************
-   * get reduced image (thumbnail)
-   * @param resId  file driveId
-   * @param thmbSz requested envelope size (128,220,320,400,512,640,720,800,1024,1280,1440,1600)
-   * @return       file's content  / null on fail
-   */
-  static byte[] readThumbNail(String resId, int thmbSz) {
-    byte[] buf = null;
-    if (mConnected && resId != null && thmbSz >= 220 && thmbSz <= 1600 ) try {
-      File gFl = mGOOSvc.files().get(resId).setFields("thumbnailLink").execute();
-      if (gFl != null){
-        String strUrl = gFl.getThumbnailLink();
-        if (!strUrl.endsWith("s220")) return null; //--- OOPS ------------>>>
-        strUrl = strUrl.substring(0, strUrl.length()-3) + Integer.toString(thmbSz);
-        InputStream is = mGOOSvc.getRequestFactory()
-        .buildGetRequest(new GenericUrl(strUrl)).execute().getContent();
-        buf = UT.is2Bytes(is);
-      }
-    } catch (Exception e) { UT.le(e); }
-    return buf;
   }
 
 }

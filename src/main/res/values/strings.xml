@@ -2,24 +2,24 @@
 <resources>
 
   <string name="app_name">GDAADemo</string>
-    <string name="disp_text">
-      GDAADemo has only 2 functions:\n\n
+  <string name="disp_text">
+      GDAADemo has 3 functions:\n\n
 
-      1/ UPLOAD (upload icon) will invoke a camera and the resulting picture is uploaded to
-      Google Drive, creating a simple tree directory structure in the process.
-      The createTreeGDAA/createTreeREST methods allow to test different methods
-      (search, create folder, …) in the process.\n\n
-
-      2/ DOWNLOAD (download icon) scans the tree created by GDAADemo
-      (testTreeGDAA/testTreeREST methods). If the object is a file (jpg), it\'s metadata
-      is updated (description field) and the content is downloaded (and dumped)
-      - only the number of bytes is reported. \n\n
-
+      1/ UPLOAD (upload icon) invokes a camera and the resulting thumbnail is uploaded to
+         Google Drive, creating a simple tree directory structure in the process.\n
+         The createTree)() method allows for testing of different CRUD primitives (search,
+         create folder, etc…) in the process.\n\n
+      2/ DOWNLOAD (download icon) scans the tree created by the createTree method. If the
+         object is a file (jpg), it\'s metadata is updated (description field) and the content
+         is downloaded (and dumped) - only the number of bytes and dimensions are reported.\n\n
+      3/ DELETE (X - delete) scans the tree created by the createTree method and deletes all the
+         files and folders in the process\n
     </string>
 
   <!-- menu -->
   <string name="action_scan">Scan Document</string>
   <string name="action_list">List Files</string>
+  <string name="action_delete">Delete Files</string>
   <string name="action_account">Select Google Account…</string>
 
   <string name="msg_connect">connection success</string>
